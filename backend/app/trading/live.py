@@ -233,7 +233,7 @@ def _active_gtt(db: Session, position_id: int) -> LiveOrder | None:
 
 def approve(db: Session, item_id: int, kite: TradingClient | None, now: datetime | None = None) -> ApprovalItem:
     settings = load_live_settings(db)
-    now_utc = utc_now()
+    now_utc = to_utc_naive(now) if now else utc_now()
     item = db.get(ApprovalItem, item_id)
     if item is None:
         raise ApprovalError("Approval not found")

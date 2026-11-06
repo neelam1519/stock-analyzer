@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from kiteconnect.exceptions import InputException
 from sqlalchemy import select
 
-from app.core.clock import IST, utc_now
+from app.core.clock import IST, to_utc_naive, utc_now
 from app.core.db import get_db
 from app.main import create_app
 from app.models import ApprovalItem, DailyCandle, IndicatorDaily, LiveOrder, Position
@@ -17,7 +17,7 @@ from app.trading.risk import get_limits
 from tests.test_paper import DAY, NEXT, setup
 
 AFTER_CLOSE = datetime(2026, 11, 5, 16, 0, tzinfo=IST)
-MARKET = datetime(2026, 11, 6, 10, 0, tzinfo=IST)
+MARKET = datetime(2026, 11, 6, 9, 20, tzinfo=IST)
 
 
 class FakeTrading:
@@ -139,7 +139,7 @@ def test_live_guards(db, settings, monkeypatch):
         live.approve(db, item_id, FakeTrading(), MARKET)
     limits.kill_switch = False
     item = db.get(ApprovalItem, item_id)
-    item.expires_at = utc_now() - timedelta(minutes=1)
+    item.expires_at = to_utc_naive(MARKET - timedelta(minutes=1))
     db.commit()
     with pytest.raises(live.ApprovalError, match="expired"):
         live.approve(db, item_id, FakeTrading(), MARKET)
