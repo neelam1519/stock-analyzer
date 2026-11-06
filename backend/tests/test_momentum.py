@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 
 import numpy as np
@@ -10,8 +11,16 @@ from app.analysis.momentum import momentum_frames, percentile_frame, rank_frame,
 from app.backtest.data import build_market_data
 from app.backtest.engine import momentum_mask
 from app.backtest.walkforward import MOMENTUM_GRID, grid_for
-from app.models import Signal
+from app.models import ResearchReport, Signal
 from app.signals.generator import generate_signals
+from app.signals.params import save_active_params
+from app.signals.research import (
+    MOMENTUM_PROMPT,
+    RESEARCH_PROMPT_VERSION,
+    SYSTEM_PROMPT,
+    prompt_for,
+    research_top_picks,
+)
 from app.signals.scoring import DEFAULT_PARAMS, MOMENTUM, MomentumSnapshot, StrategyParams, momentum_decision
 from tests.test_signals import seeded
 
@@ -121,3 +130,40 @@ def test_generator_writes_momentum_signals(db, settings, monkeypatch):
     signal = db.scalar(select(Signal))
     assert result.scored == 1 and signal.strategy == "momentum_v1"
     assert signal.action == "SELL" and "Illiquid" in signal.rationale
+
+
+class RecordingLLM:
+    model = "gemini/gemini-3.5-flash-lite"
+
+    def __init__(self):
+        self.calls = []
+
+    def complete_json(self, system, user, purpose):
+        self.calls.append((system, json.loads(user)))
+        return {
+            "summary": "Leader.",
+            "bull_case": [],
+            "bear_case": [],
+            "key_risks": [],
+            "verdict": "buy",
+            "conviction": 0.6,
+        }
+
+
+def test_momentum_signals_get_momentum_research_prompt(db, settings, monkeypatch):
+    seeded(db, monkeypatch)
+    update_indicators(db)
+    save_active_params(db, DEFAULT_PARAMS, "test")
+    generate_signals(db)
+    signal = db.scalar(select(Signal))
+    signal.action = "BUY"
+    db.commit()
+
+    llm = RecordingLLM()
+    result = research_top_picks(db, llm, signal.as_of_date, DEFAULT_PARAMS.name)
+    system, context = llm.calls[0]
+    report = db.scalar(select(ResearchReport))
+    assert result.reports == 1 and system == MOMENTUM_PROMPT and report.prompt_version == "m1"
+    assert context["strategy"] == "momentum_v1" and "12m" in context["price_change_pct"]
+    assert context["pct_above_200d_average"] is not None
+    assert prompt_for("swing_v1") == (SYSTEM_PROMPT, RESEARCH_PROMPT_VERSION)

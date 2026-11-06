@@ -23,6 +23,28 @@ Reply with JSON only:
 {"summary":"2-3 sentences","bull_case":["..."],"bear_case":["..."],"key_risks":["..."],"verdict":"buy|wait|avoid","conviction":0.0}
 conviction is 0.0-1.0 for the verdict. Use "wait" when the setup is good but timing or event risk argues for patience."""
 
+MOMENTUM_PROMPT = """You review buy candidates for a systematic momentum strategy on NSE (Indian equities).
+How the system works, so you do not second-guess it:
+- It ranks the NIFTY 500 by 6- and 12-month risk-adjusted returns and buys the top 20. Large past gains are the reason a stock is picked.
+- Backtests show that buying these leaders straight away beats waiting for a pullback. A high RSI, trading near a 52-week high, being far above moving averages or a big rally are NOT reasons to wait or avoid.
+- Market timing is handled separately: new buys happen only while NIFTY is above its 200-day average. Do not use the market regime or broad market risk as a reason.
+- Exits are handled by an ATR stop, a trailing stop and the ranking, so the verdict does not need to manage ordinary price risk.
+Your only job is to catch stock-specific problems that price data cannot show. Use only facts in the input. Never invent news, numbers or dates.
+Verdicts:
+- "avoid": a concrete red flag in the input news: fraud or governance concerns, regulator, tax or court action against the company, auditor or key management resignation, promoter pledging or heavy promoter selling, a profit warning or clearly weak results, debt default or a rating downgrade, or a rally driven by a fixed-price event that caps upside (open offer, buyback, delisting or merger swap ratio). Also "avoid" if the stock fell more than 15% in the last 5 days.
+- "wait": a dated, material company event within the next 5 trading days that the input explicitly states (results date, board meeting on fund-raising or a deal, court or regulatory ruling), or a jump of more than 25% in the last 5 days with no news explaining it.
+- "buy": everything else. Thin or no news is normal for this strategy and is not a reason to wait.
+For "avoid" or "wait", key_risks must quote the specific input fact behind it. If you cannot point to one, the verdict is "buy".
+Reply with JSON only:
+{"summary":"2-3 sentences on what is driving the move","bull_case":["..."],"bear_case":["..."],"key_risks":["..."],"verdict":"buy|wait|avoid","conviction":0.0}
+conviction is 0.0-1.0 for the verdict."""
+
+PROMPTS = {"momentum_v1": (MOMENTUM_PROMPT, "m1")}
+
+
+def prompt_for(strategy: str) -> tuple[str, str]:
+    return PROMPTS.get(strategy, (SYSTEM_PROMPT, RESEARCH_PROMPT_VERSION))
+
 
 @dataclass
 class ResearchResult:
@@ -51,14 +73,18 @@ def _context(db: Session, instrument: Instrument, signal: Signal, regime: Regime
             select(DailyCandle.close)
             .where(DailyCandle.instrument_id == instrument.id, DailyCandle.trade_date <= signal.as_of_date)
             .order_by(DailyCandle.trade_date.desc())
-            .limit(61)
+            .limit(253)
         )
     )
     change = {
         label: round((float(closes[0]) / float(closes[n]) - 1) * 100, 2)
-        for label, n in (("5d", 5), ("20d", 20), ("60d", 60))
+        for label, n in (("5d", 5), ("20d", 20), ("60d", 60), ("6m", 126), ("12m", 252))
         if len(closes) > n
     }
+    trend = None
+    if len(closes) >= 200:
+        sma200 = sum(float(c) for c in closes[:200]) / 200
+        trend = round((float(closes[0]) / sma200 - 1) * 100, 2)
     news = db.execute(
         select(
             NewsArticle.title,
@@ -99,8 +125,10 @@ def _context(db: Session, instrument: Instrument, signal: Signal, regime: Regime
         "company": instrument.name,
         "sector": instrument.sector,
         "as_of": signal.as_of_date.isoformat(),
+        "strategy": signal.strategy,
         "last_close": float(closes[0]) if closes else None,
         "price_change_pct": change,
+        "pct_above_200d_average": trend,
         "indicators": indicators,
         "signal": {
             "score": float(signal.score),
@@ -135,7 +163,8 @@ def write_report(
     db: Session, llm: JSONCompleter, instrument: Instrument, signal: Signal, regime: Regime
 ) -> ResearchReport:
     context = _context(db, instrument, signal, regime, get_settings().llm_model)
-    payload = llm.complete_json(SYSTEM_PROMPT, json.dumps(context, ensure_ascii=False), "research_report")
+    system_prompt, prompt_version = prompt_for(signal.strategy)
+    payload = llm.complete_json(system_prompt, json.dumps(context, ensure_ascii=False), "research_report")
     verdict = str(payload.get("verdict", "")).lower()
     if verdict not in VERDICTS or not payload.get("summary"):
         raise LLMResponseError("Research reply missing verdict or summary")
@@ -159,7 +188,7 @@ def write_report(
         bear_case=json.dumps(_as_list(payload.get("bear_case")), ensure_ascii=False),
         key_risks=json.dumps(_as_list(payload.get("key_risks")), ensure_ascii=False),
         verdict=verdict,
-        prompt_version=RESEARCH_PROMPT_VERSION,
+        prompt_version=prompt_version,
         score=round(conviction * 100, 2),
     )
     db.add(report)
