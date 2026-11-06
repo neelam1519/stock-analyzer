@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.backtest.engine import REGIME_SIZE, PortfolioConfig
 from app.core.clock import utc_now
 from app.models import Instrument, PaperOrder, PortfolioSnapshot, Position, RiskLimits, Trade
+from app.signals.scoring import DEFAULT_PARAMS, StrategyParams
 
 BOOK = "paper"
 COSTS = PortfolioConfig()
@@ -16,7 +17,7 @@ DEFAULT_LIMITS = {
     "capital": Decimal(1000000),
     "risk_per_trade_pct": Decimal("1.0"),
     "max_position_pct": Decimal(20),
-    "max_open_positions": 8,
+    "max_open_positions": 10,
     "daily_loss_limit_pct": Decimal(2),
     "weekly_loss_limit_pct": Decimal(5),
     "max_sector_pct": Decimal(40),
@@ -132,9 +133,14 @@ class EntryDecision:
 
 
 class EntryGate:
-    def __init__(self, db: Session, today: date, regime: str):
+    def __init__(self, db: Session, today: date, regime: str, params: StrategyParams = DEFAULT_PARAMS):
         self.db = db
+        self.params = params
         self.limits = get_limits(db)
+        self.equal_weight = params.sizing == "equal"
+        self.max_slots = (
+            min(self.limits.max_open_positions, params.slots) if self.equal_weight else self.limits.max_open_positions
+        )
         self.acct = account(db)
         self.today = today
         self.regime = regime
@@ -182,20 +188,26 @@ class EntryGate:
             return EntryDecision(False, "already held or ordered")
         if instrument_id in self.cooling:
             return EntryDecision(False, f"exited within {COOLDOWN_DAYS} days")
-        if self.slots_used >= limits.max_open_positions:
-            return EntryDecision(False, f"max {limits.max_open_positions} positions")
+        if self.slots_used >= self.max_slots:
+            return EntryDecision(False, f"max {self.max_slots} positions")
         key = sector or "Other"
         if self.sector_count.get(key, 0) >= COSTS.max_per_sector:
             return EntryDecision(False, f"max {COSTS.max_per_sector} positions in {key}")
         risk_per_share = entry - stop
         if risk_per_share <= 0:
             return EntryDecision(False, "invalid stop")
-        risk_budget = equity * float(limits.risk_per_trade_pct) / 100 * REGIME_SIZE.get(self.regime, 0.5)
+        risk_budget = (
+            math.inf
+            if self.equal_weight
+            else equity * float(limits.risk_per_trade_pct) / 100 * REGIME_SIZE.get(self.regime, 0.5)
+        )
+        slot_value = equity / self.params.slots if self.equal_weight else math.inf
         sector_room = equity * float(limits.max_sector_pct) / 100 - self.sector_value.get(key, 0.0)
         reserve_price = entry * (1 + GAP_UP_LIMIT) * (1 + COSTS.cost_pct / 100)
         qty = math.floor(
             min(
                 risk_budget / risk_per_share,
+                slot_value / entry,
                 equity * float(limits.max_position_pct) / 100 / entry,
                 sector_room / entry,
                 self.cash / reserve_price,
@@ -207,4 +219,8 @@ class EntryGate:
         self.slots_used += 1
         self.cash -= qty * reserve_price
         self._add_sector(sector, qty * entry)
+        if self.equal_weight:
+            return EntryDecision(
+                True, f"1/{self.params.slots} of equity Rs {qty * entry:,.0f}; risk Rs {qty * risk_per_share:,.0f}", qty
+            )
         return EntryDecision(True, f"risk Rs {qty * risk_per_share:,.0f} ({self.regime} sizing)", qty)

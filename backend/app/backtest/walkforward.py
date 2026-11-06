@@ -25,11 +25,19 @@ MOMENTUM_GRID = {
     "trail_atr": (3.0, 5.0),
     "max_hold_days": (60, 90),
 }
+MOMENTUM_V2_GRID = {
+    "top_n": (10, 20),
+    "exit_rank": (60, 100),
+    "stop_atr": (3.0, 4.0),
+    "trail_atr": (5.0, 6.0),
+}
 MIN_TRAIN_TRADES = 20
 
 
 def grid_for(params: StrategyParams) -> dict:
-    return MOMENTUM_GRID if params.model == "momentum" else GRID
+    if params.model != "momentum":
+        return GRID
+    return MOMENTUM_V2_GRID if params.sizing == "equal" else MOMENTUM_GRID
 
 
 @dataclass

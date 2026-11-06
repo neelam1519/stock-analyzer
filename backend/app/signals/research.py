@@ -39,7 +39,7 @@ Reply with JSON only:
 {"summary":"2-3 sentences on what is driving the move","bull_case":["..."],"bear_case":["..."],"key_risks":["..."],"verdict":"buy|wait|avoid","conviction":0.0}
 conviction is 0.0-1.0 for the verdict."""
 
-PROMPTS = {"momentum_v1": (MOMENTUM_PROMPT, "m1")}
+PROMPTS = {"momentum_v1": (MOMENTUM_PROMPT, "m1"), "momentum_v2": (MOMENTUM_PROMPT, "m1")}
 
 
 def prompt_for(strategy: str) -> tuple[str, str]:

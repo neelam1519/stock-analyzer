@@ -280,7 +280,11 @@ def end_of_day(db: Session, day: date, when: datetime | None = None) -> PaperRes
         if params.trail_atr and ind is not None and ind.atr14 is not None:
             new_stop = max(new_stop, _f(position.highest_close) - params.trail_atr * float(ind.atr14))
         position.stop_loss = round(new_stop, 2)
-        if position.opened_at and sessions_held(db, position.opened_at.date(), day) >= params.max_hold_days:
+        if (
+            params.max_hold_days
+            and position.opened_at
+            and sessions_held(db, position.opened_at.date(), day) >= params.max_hold_days
+        ):
             close_position(db, position, c, "time", when)
             result.closed += 1
             continue
@@ -347,9 +351,9 @@ def plan_entries(db: Session, day: date) -> PaperResult:
         db.commit()
         return result
     rows = sorted(rows, key=lambda r: (0 if r[2] == "buy" else 1, -float(r[0].score)))
-    gate = EntryGate(db, day, rows[0][0].regime or "unknown")
+    gate = EntryGate(db, day, rows[0][0].regime or "unknown", params)
     for signal, instrument, verdict in rows:
-        if gate.slots_used >= gate.limits.max_open_positions and not gate.limits.kill_switch:
+        if gate.slots_used >= gate.max_slots and not gate.limits.kill_switch:
             break
         if verdict == "avoid":
             decision_ok, reason, qty = False, "AI research verdict: avoid", 0

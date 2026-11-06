@@ -1,5 +1,5 @@
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
@@ -90,8 +90,15 @@ def buy_mask(data: MarketData, params: StrategyParams) -> tuple[np.ndarray, np.n
     return np.nan_to_num(total), buys & allowed & ~np.isnan(data.close), sells
 
 
+def sized_config(config: PortfolioConfig, params: StrategyParams) -> PortfolioConfig:
+    if params.sizing != "equal":
+        return config
+    return replace(config, max_positions=params.slots, max_position_pct=100.0 / params.slots)
+
+
 def simulate(data: MarketData, params: StrategyParams, config: PortfolioConfig | None = None) -> SimulationResult:
-    config = config or PortfolioConfig()
+    config = sized_config(config or PortfolioConfig(), params)
+    equal_weight = params.sizing == "equal"
     total, buys, sells = buy_mask(data, params)
     n_days = len(data.dates)
     cash = config.capital
@@ -185,7 +192,7 @@ def simulate(data: MarketData, params: StrategyParams, config: PortfolioConfig |
                 pos.stop = max(pos.stop, pos.entry_price)
             if params.trail_atr and not math.isnan(atr):
                 pos.stop = max(pos.stop, pos.highest_close - params.trail_atr * atr)
-            if day - pos.entry_index >= params.max_hold_days:
+            if params.max_hold_days and day - pos.entry_index >= params.max_hold_days:
                 close_position(col, day, c, "time")
                 continue
             if sells[day, col]:
@@ -211,7 +218,8 @@ def simulate(data: MarketData, params: StrategyParams, config: PortfolioConfig |
                     sector = data.sectors[col]
                     if sector_count.get(sector, 0) >= config.max_per_sector:
                         continue
-                    pending_entries.append((col, equity * config.risk_per_trade_pct / 100 * size, data.atr[day, col]))
+                    budget = math.inf if equal_weight else equity * config.risk_per_trade_pct / 100 * size
+                    pending_entries.append((col, budget, data.atr[day, col]))
                     sector_count[sector] = sector_count.get(sector, 0) + 1
                     slots -= 1
 

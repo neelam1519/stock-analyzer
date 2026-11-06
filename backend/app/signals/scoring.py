@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 
 @dataclass(frozen=True)
@@ -22,6 +22,8 @@ class StrategyParams:
     top_n: int = 20
     exit_rank: int = 60
     market_filter: bool = False
+    sizing: str = "risk"
+    slots: int = 8
 
 
 MOMENTUM = StrategyParams(
@@ -35,7 +37,17 @@ MOMENTUM = StrategyParams(
     exit_rank=60,
     market_filter=True,
 )
-DEFAULT_PARAMS = MOMENTUM
+MOMENTUM_V2 = replace(
+    MOMENTUM,
+    name="momentum_v2",
+    sizing="equal",
+    slots=10,
+    stop_atr=4.0,
+    target_atr=100.0,
+    max_hold_days=0,
+    exit_rank=100,
+)
+DEFAULT_PARAMS = MOMENTUM_V2
 
 
 @dataclass

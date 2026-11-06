@@ -9,7 +9,8 @@ from app.core.calendar import is_trading_day, next_trading_day, parse_holidays
 from app.core.db import get_db
 from app.main import create_app
 from app.models import DailyCandle, Instrument, PaperOrder, PortfolioSnapshot, Position, Signal, Trade
-from app.signals.scoring import DEFAULT_PARAMS
+from app.signals.params import save_active_params
+from app.signals.scoring import MOMENTUM, MOMENTUM_V2
 from app.trading import paper
 from app.trading.risk import GAP_UP_LIMIT, account, get_limits
 from tests.test_signals import seeded
@@ -19,16 +20,17 @@ NEXT = date(2026, 11, 6)
 WHEN = datetime(2026, 11, 5, 4, 0)
 
 
-def setup(db, monkeypatch, entry=200.0, stop=190.0, target=220.0, regime="bull"):
+def setup(db, monkeypatch, entry=200.0, stop=190.0, target=220.0, regime="bull", params=MOMENTUM):
     seeded(db, monkeypatch)
     update_indicators(db)
+    save_active_params(db, params, "test")
     reliance = db.scalar(select(Instrument).where(Instrument.tradingsymbol == "RELIANCE"))
     reliance.sector = "Energy"
     db.add(
         Signal(
             instrument_id=reliance.id,
             as_of_date=DAY,
-            strategy=DEFAULT_PARAMS.name,
+            strategy=params.name,
             action="BUY",
             score=90,
             regime=regime,
@@ -79,6 +81,14 @@ def test_kill_switch_and_regime_sizing(db, settings, monkeypatch):
     assert db.scalar(select(PaperOrder)).qty == 750
 
 
+def test_equal_weight_sizing_uses_one_slot_of_equity(db, settings, monkeypatch):
+    setup(db, monkeypatch, regime="neutral", params=MOMENTUM_V2)
+    result = paper.plan_entries(db, DAY)
+    order = db.scalar(select(PaperOrder))
+    assert result.planned == 1 and order.qty == 1_000_000 // MOMENTUM_V2.slots // 200
+    assert order.reason.endswith("1/10 of equity Rs 100,000; risk Rs 5,000")
+
+
 def test_fill_then_target_and_cash_accounting(db, settings, monkeypatch):
     reliance = setup(db, monkeypatch)
     paper.plan_entries(db, DAY)
@@ -122,7 +132,7 @@ def test_end_of_day_fallback_fill_trailing_and_sell_exit(db, settings, monkeypat
     assert result.filled == 1 and position.status == "open"
     assert float(position.stop_loss) >= float(position.avg_price)
 
-    db.add(Signal(instrument_id=reliance.id, as_of_date=NEXT, strategy=DEFAULT_PARAMS.name, action="SELL", score=20))
+    db.add(Signal(instrument_id=reliance.id, as_of_date=NEXT, strategy=MOMENTUM.name, action="SELL", score=20))
     db.commit()
     paper.end_of_day(db, NEXT, datetime(2026, 11, 6, 10, 0))
     exit_order = db.scalar(select(PaperOrder).where(PaperOrder.side == "SELL"))

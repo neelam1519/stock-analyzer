@@ -19,8 +19,16 @@ function entryRule(p: StrategyParamsShape) {
   return `score ≥ ${p.buy_threshold} · enter in ${p.entry_regimes.length === 4 ? "all regimes" : p.entry_regimes.join("/")}`;
 }
 
+function holdRule(p: StrategyParamsShape) {
+  return p.max_hold_days ? `max ${p.max_hold_days}d` : "no time limit";
+}
+
+function sizingRule(p: StrategyParamsShape) {
+  return p.sizing === "equal" ? `equal weight, ${p.slots} slots` : "risk-based sizing";
+}
+
 function paramsLine(p: StrategyParamsShape) {
-  return `${entryRule(p)} · stop ${p.stop_atr}×ATR · target ${p.target_atr}×ATR · max ${p.max_hold_days}d · trail ${p.trail_atr}×ATR`;
+  return `${entryRule(p)} · ${sizingRule(p)} · stop ${p.stop_atr}×ATR · target ${p.target_atr}×ATR · ${holdRule(p)} · trail ${p.trail_atr}×ATR`;
 }
 
 function Stat({ label, value, tone = "" }: { label: string; value: string; tone?: string }) {
@@ -111,7 +119,7 @@ function Detail({ id, onApplied }: { id: number; onApplied: () => void }) {
                       {f.test_start} → {f.test_end}
                     </td>
                     <td className="py-2 font-mono text-xs text-muted">
-                      {entryRule(f.params)} · {f.params.stop_atr}/{f.params.target_atr} ATR · {f.params.max_hold_days}d
+                      {entryRule(f.params)} · {f.params.stop_atr}/{f.params.target_atr} ATR · {holdRule(f.params)}
                     </td>
                     <td className="py-2 text-right font-mono text-xs">{f.train_metrics.sharpe?.toFixed(2)}</td>
                     <td className={`py-2 text-right font-mono text-xs ${toneFor(f.test_metrics.cagr_pct)}`}>{pct(f.test_metrics.cagr_pct)}</td>

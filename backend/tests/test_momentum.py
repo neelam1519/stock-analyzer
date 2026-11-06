@@ -10,7 +10,7 @@ from app.analysis.indicators import compute_indicators, update_indicators
 from app.analysis.momentum import momentum_frames, percentile_frame, rank_frame, traded_value_frame
 from app.backtest.data import build_market_data
 from app.backtest.engine import momentum_mask
-from app.backtest.walkforward import MOMENTUM_GRID, grid_for
+from app.backtest.walkforward import MOMENTUM_GRID, MOMENTUM_V2_GRID, grid_for
 from app.models import ResearchReport, Signal
 from app.signals.generator import generate_signals
 from app.signals.params import save_active_params
@@ -21,7 +21,14 @@ from app.signals.research import (
     prompt_for,
     research_top_picks,
 )
-from app.signals.scoring import DEFAULT_PARAMS, MOMENTUM, MomentumSnapshot, StrategyParams, momentum_decision
+from app.signals.scoring import (
+    DEFAULT_PARAMS,
+    MOMENTUM,
+    MOMENTUM_V2,
+    MomentumSnapshot,
+    StrategyParams,
+    momentum_decision,
+)
 from tests.test_signals import seeded
 
 DAYS = 330
@@ -118,9 +125,10 @@ def test_backtest_mask_matches_live_decision_every_day():
 
 
 def test_momentum_is_default_and_tunes_its_own_grid():
-    assert DEFAULT_PARAMS.model == "momentum" and DEFAULT_PARAMS.name == "momentum_v1"
-    assert grid_for(DEFAULT_PARAMS) is MOMENTUM_GRID
-    assert grid_for(StrategyParams()) is not MOMENTUM_GRID
+    assert DEFAULT_PARAMS is MOMENTUM_V2 and DEFAULT_PARAMS.sizing == "equal" and DEFAULT_PARAMS.max_hold_days == 0
+    assert grid_for(DEFAULT_PARAMS) is MOMENTUM_V2_GRID
+    assert grid_for(MOMENTUM) is MOMENTUM_GRID
+    assert grid_for(StrategyParams()) not in (MOMENTUM_GRID, MOMENTUM_V2_GRID)
 
 
 def test_generator_writes_momentum_signals(db, settings, monkeypatch):
@@ -128,7 +136,7 @@ def test_generator_writes_momentum_signals(db, settings, monkeypatch):
     update_indicators(db)
     result, _ = generate_signals(db)
     signal = db.scalar(select(Signal))
-    assert result.scored == 1 and signal.strategy == "momentum_v1"
+    assert result.scored == 1 and signal.strategy == DEFAULT_PARAMS.name
     assert signal.action == "SELL" and "Illiquid" in signal.rationale
 
 
@@ -164,6 +172,6 @@ def test_momentum_signals_get_momentum_research_prompt(db, settings, monkeypatch
     system, context = llm.calls[0]
     report = db.scalar(select(ResearchReport))
     assert result.reports == 1 and system == MOMENTUM_PROMPT and report.prompt_version == "m1"
-    assert context["strategy"] == "momentum_v1" and "12m" in context["price_change_pct"]
+    assert context["strategy"] == DEFAULT_PARAMS.name and "12m" in context["price_change_pct"]
     assert context["pct_above_200d_average"] is not None
     assert prompt_for("swing_v1") == (SYSTEM_PROMPT, RESEARCH_PROMPT_VERSION)

@@ -41,7 +41,9 @@ def next_fire(spec: JobSpec, now: datetime, holidays: set[date]) -> datetime | N
             return None
         local = moment.astimezone(IST)
         if spec.trading_day_only and not is_trading_day(local.date(), holidays):
-            moment = spec.trigger.get_next_fire_time(None, datetime.combine(local.date() + timedelta(days=1), time(0), IST))
+            moment = spec.trigger.get_next_fire_time(
+                None, datetime.combine(local.date() + timedelta(days=1), time(0), IST)
+            )
             continue
         if spec.market_hours_only and not in_market_hours(local):
             moment = spec.trigger.get_next_fire_time(moment, moment + timedelta(seconds=1))
@@ -94,9 +96,7 @@ def _beat_dict(beat: dict | None) -> dict | None:
 def last_run(db: Session, spec: JobSpec) -> dict | None:
     if spec.job_name is None:
         return _beat_dict(runner.last_beat(spec.id))
-    run = db.scalar(
-        select(JobRun).where(JobRun.job_name == spec.job_name).order_by(JobRun.started_at.desc()).limit(1)
-    )
+    run = db.scalar(select(JobRun).where(JobRun.job_name == spec.job_name).order_by(JobRun.started_at.desc()).limit(1))
     return _run_dict(run)
 
 

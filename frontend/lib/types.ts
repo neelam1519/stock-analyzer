@@ -128,6 +128,8 @@ export type StrategyParamsShape = {
   top_n: number;
   exit_rank: number;
   market_filter: boolean;
+  sizing: "risk" | "equal";
+  slots: number;
   buy_threshold: number;
   sell_threshold: number;
   news_weight: number;

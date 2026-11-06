@@ -131,7 +131,9 @@ def run_now(job_id: str) -> bool:
     if spec is None:
         return False
     if _scheduler is not None:
-        _scheduler.add_job(_with_beat(spec), id=f"{job_id}-manual-{now_ist().timestamp():.0f}", name=f"{spec.label} (manual)")
+        _scheduler.add_job(
+            _with_beat(spec), id=f"{job_id}-manual-{now_ist().timestamp():.0f}", name=f"{spec.label} (manual)"
+        )
     else:
         _with_beat(spec)()
     return True

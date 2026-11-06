@@ -572,7 +572,7 @@ def live_end_of_day(db: Session, kite: TradingClient | None, day: date) -> SyncR
                 result.trailed += 1
         sessions = sessions_held(db, position.opened_at.date(), day) if position.opened_at else 0
         reason = None
-        if sessions >= params.max_hold_days:
+        if params.max_hold_days and sessions >= params.max_hold_days:
             reason = "time"
         elif position.instrument_id in sells:
             reason = "signal"
