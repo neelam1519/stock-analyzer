@@ -4,8 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
 import { regimeTone } from "@/components/signals/badges";
+import { nextJob, useSchedulerClock } from "@/components/timers/timers-card";
 import { api } from "@/lib/api";
 import { formatInrCompact, formatSignedInr, toneFor } from "@/lib/format";
+import { JOB_NAMES, countdown } from "@/lib/timers";
 import type { AccountSummary } from "@/lib/types";
 
 const time = new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
@@ -62,6 +64,8 @@ export function TopBar() {
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
   });
+  const scheduler = useSchedulerClock();
+  const upcoming = scheduler.data ? nextJob(scheduler.data.jobs) : undefined;
 
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-surface/95 backdrop-blur">
@@ -77,6 +81,11 @@ export function TopBar() {
                   {data.market.open ? "Open" : "Closed"} · {time.format(new Date(data.now_ist))}
                 </span>
               </Item>
+              {scheduler.data && scheduler.now != null ? (
+                <Item label={scheduler.data.market.open ? "Closes" : "Opens"}>
+                  {countdown(scheduler.data.market.open ? scheduler.data.market.closes_at : scheduler.data.market.opens_at, scheduler.now)}
+                </Item>
+              ) : null}
               <Item label="NIFTY 50" title={`India VIX ${data.regime.vix?.toFixed(2) ?? "—"}`}>
                 {data.regime.nifty?.toLocaleString("en-IN", { maximumFractionDigits: 0 }) ?? "—"}{" "}
                 <span className={`text-[11px] uppercase ${regimeTone(data.regime.name)}`}>{data.regime.name}</span>
@@ -121,6 +130,12 @@ export function TopBar() {
               </Item>
               <Item label="Open · pending">
                 {data.paper.open_positions} · {data.paper.pending_orders}
+              </Item>
+            </Group>
+
+            <Group label="Jobs" href="/">
+              <Item label={upcoming ? `Next · ${JOB_NAMES[upcoming.id] ?? upcoming.id}` : "Scheduler"}>
+                {scheduler.now == null ? "…" : upcoming ? countdown(upcoming.next_run, scheduler.now) : <span className="text-negative">off</span>}
               </Item>
             </Group>
 

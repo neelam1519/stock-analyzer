@@ -10,7 +10,7 @@ from app.core.calendar import cached_holidays, next_trading_day
 from app.core.clock import now_ist, utc_now
 from app.core.db import get_db
 from app.models import Instrument, PaperOrder, PortfolioSnapshot, Position
-from app.scheduler import pipeline, runner
+from app.scheduler import pipeline, runner, timers
 from app.signals.generator import latest_session
 from app.trading import paper
 from app.trading.risk import BOOK, account, get_limits, position_price
@@ -228,8 +228,8 @@ def kill_switch(body: KillSwitchIn, db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/scheduler")
-def scheduler_status() -> dict:
-    return {"now_ist": now_ist().isoformat(), "jobs": runner.status()}
+def scheduler_status(db: Session = Depends(get_db)) -> dict:
+    return timers.timers(db)
 
 
 @router.post("/scheduler/{job_id}/run", status_code=202)

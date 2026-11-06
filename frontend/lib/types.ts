@@ -278,7 +278,32 @@ export type RiskLimits = {
   updated_at: string | null;
 };
 
-export type SchedulerStatus = { now_ist: string; jobs: { id: string; label: string; enabled: boolean; next_run: string | null }[] };
+export type JobLastRun = {
+  started_at: string | null;
+  finished_at: string | null;
+  status: "running" | "success" | "failed";
+  details: string | null;
+  error: string | null;
+};
+
+export type SchedulerJob = {
+  id: string;
+  title: string;
+  schedule: string;
+  enabled: boolean;
+  next_run: string | null;
+  last_run: JobLastRun | null;
+};
+
+export type DataFreshness = { key: string; label: string; at: string | null; as_of: string | null; job: string | null };
+
+export type SchedulerStatus = {
+  now: string;
+  market: { open: boolean; trading_day: boolean; opens_at: string | null; closes_at: string | null };
+  kite: { login_at: string | null; expires_at: string | null };
+  jobs: SchedulerJob[];
+  data: DataFreshness[];
+};
 
 export type LiveSettings = {
   mode: "paper" | "approve";
