@@ -34,13 +34,15 @@ A personal swing-trading analyzer for NSE equities. It pulls market data from Ze
    cd backend && python main.py
    ```
 
-   `main.py` switches into `backend/.venv` on its own, so any Python works. `HOST` and `PORT` env vars override `127.0.0.1:8000`, and `--no-reload` turns off auto-reload.
+   `main.py` switches into `backend/.venv` on its own, so any Python works. `HOST` and `PORT` env vars override `127.0.0.1:8100`, and `--no-reload` turns off auto-reload.
 
 5. Start the frontend. Copy `frontend/.env.example` to `frontend/.env.local` and set the same `BACKEND_API_KEY` first:
 
    ```bash
    cd frontend && npm install && npm run dev
    ```
+
+   Open http://localhost:3100. In the Kite developer console, the app's redirect URL must be `http://127.0.0.1:8100/auth/kite/callback`.
 
 ## Checks
 

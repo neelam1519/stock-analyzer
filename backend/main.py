@@ -20,7 +20,7 @@ def run() -> None:
 
     os.chdir(ROOT)
     host = os.environ.get("HOST", "127.0.0.1")
-    port = int(os.environ.get("PORT", "8000"))
+    port = int(os.environ.get("PORT", "8100"))
     reload = "--no-reload" not in sys.argv
     uvicorn.run("app.main:app", host=host, port=port, reload=reload, reload_dirs=[str(ROOT / "app")])
 

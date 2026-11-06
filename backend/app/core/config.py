@@ -13,8 +13,8 @@ class Settings(BaseSettings):
 
     app_env: str = "dev"
     backend_api_key: str = "change-me"
-    cors_origins: list[str] = ["http://localhost:3000"]
-    frontend_url: str = "http://localhost:3000"
+    cors_origins: list[str] = ["http://localhost:3100"]
+    frontend_url: str = "http://localhost:3100"
 
     mssql_host: str = "localhost"
     mssql_port: int = 1433
@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     kite_api_key: str = ""
     kite_api_secret: str = ""
-    kite_redirect_url: str = "http://127.0.0.1:8000/auth/kite/callback"
+    kite_redirect_url: str = "http://127.0.0.1:8100/auth/kite/callback"
     kite_min_request_interval: float = 0.35
     daily_history_days: int = 1825
     intraday_history_days: int = 365
