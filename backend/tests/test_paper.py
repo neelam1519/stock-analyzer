@@ -11,7 +11,7 @@ from app.main import create_app
 from app.models import DailyCandle, Instrument, PaperOrder, PortfolioSnapshot, Position, Signal, Trade
 from app.signals.scoring import DEFAULT_PARAMS
 from app.trading import paper
-from app.trading.risk import account, get_limits
+from app.trading.risk import GAP_UP_LIMIT, account, get_limits
 from tests.test_signals import seeded
 
 DAY = date(2026, 11, 5)
@@ -100,8 +100,17 @@ def test_fill_then_target_and_cash_accounting(db, settings, monkeypatch):
 def test_gap_up_cancels_order(db, settings, monkeypatch):
     reliance = setup(db, monkeypatch)
     paper.plan_entries(db, DAY)
-    result = paper.fill_orders(db, {reliance.id: 210.0}, WHEN)
+    reference = float(db.scalar(select(PaperOrder.limit_price)))
+    result = paper.fill_orders(db, {reliance.id: reference * (1 + GAP_UP_LIMIT) + 1}, WHEN)
     assert result.cancelled == 1 and db.scalar(select(Position)) is None
+
+
+def test_gap_below_limit_still_fills(db, settings, monkeypatch):
+    reliance = setup(db, monkeypatch)
+    paper.plan_entries(db, DAY)
+    reference = float(db.scalar(select(PaperOrder.limit_price)))
+    result = paper.fill_orders(db, {reliance.id: reference * 1.04}, WHEN)
+    assert GAP_UP_LIMIT == 0.05 and result.filled == 1 and result.cancelled == 0
 
 
 def test_end_of_day_fallback_fill_trailing_and_sell_exit(db, settings, monkeypatch):

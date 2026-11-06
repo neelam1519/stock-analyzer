@@ -22,7 +22,7 @@ DEFAULT_LIMITS = {
     "max_sector_pct": Decimal(40),
     "kill_switch": False,
 }
-GAP_UP_LIMIT = 0.03
+GAP_UP_LIMIT = 0.05
 COOLDOWN_DAYS = 7
 
 
