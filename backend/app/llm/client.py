@@ -44,7 +44,7 @@ class LiteLLMCompleter:
         self.api_key = settings.llm_api_key if model is None else ""
         self.timeout = settings.llm_timeout_seconds
         if not self.api_key and settings.llm_provider != "ollama":
-            raise LLMNotConfigured(f"Set {settings.llm_provider.upper()}_API_KEY in .env for {self.model}")
+            raise LLMNotConfigured(f"Set {settings.llm_provider.upper()}_API_KEY (or LLM_API_KEY) in .env for {self.model}")
 
     def complete_json(self, system: str, user: str, purpose: str) -> dict[str, Any]:
         import litellm

@@ -1,5 +1,7 @@
+import os
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL
 
@@ -8,7 +10,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),
         env_file_encoding="utf-8",
-        extra="ignore",
+        extra="allow",
     )
 
     app_env: str = "dev"
@@ -44,6 +46,7 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     deepseek_api_key: str = ""
     openrouter_api_key: str = ""
+    llm_api_key_override: str = Field(default="", validation_alias="LLM_API_KEY")
     news_lookback_days: int = 3
     scheduler_enabled: bool = True
     research_top_n: int = 10
@@ -55,7 +58,12 @@ class Settings(BaseSettings):
 
     @property
     def llm_api_key(self) -> str:
-        return getattr(self, f"{self.llm_provider}_api_key", "")
+        """Key for any LiteLLM provider: LLM_API_KEY, else <PROVIDER>_API_KEY from .env or the environment."""
+        if self.llm_api_key_override:
+            return self.llm_api_key_override
+        name = f"{self.llm_provider}_api_key"
+        value = getattr(self, name, None) or (self.model_extra or {}).get(name) or os.environ.get(name.upper())
+        return value or ""
 
     @property
     def database_url(self) -> URL:

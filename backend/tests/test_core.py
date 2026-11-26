@@ -58,3 +58,21 @@ def test_db_health_reports_503_when_unreachable(settings, monkeypatch):
     response = TestClient(app).get("/api/health/db", headers={"X-API-Key": "test-key"})
     assert response.status_code == 503
     assert "Login timeout expired" in response.json()["detail"]
+
+
+def test_llm_key_works_for_any_provider(settings, monkeypatch):
+    from app.core import config
+
+    def fresh(**env):
+        for key in ("LLM_API_KEY", "GITHUB_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"):
+            monkeypatch.delenv(key, raising=False)
+        for key, value in env.items():
+            monkeypatch.setenv(key, value)
+        config.get_settings.cache_clear()
+        return config.get_settings()
+
+    assert fresh(LLM_MODEL="github/gpt-4o-mini", GITHUB_API_KEY="gh").llm_api_key == "gh"
+    assert fresh(LLM_MODEL="anthropic/claude-sonnet-5-5", ANTHROPIC_API_KEY="an").llm_api_key == "an"
+    assert fresh(LLM_MODEL="gemini/x", GEMINI_API_KEY="ge").llm_api_key == "ge"
+    assert fresh(LLM_MODEL="github/gpt-4o-mini", GITHUB_API_KEY="gh", LLM_API_KEY="any").llm_api_key == "any"
+    assert fresh(LLM_MODEL="github/gpt-4o-mini").llm_api_key == ""
