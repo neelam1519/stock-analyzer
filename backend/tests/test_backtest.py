@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from app.analysis.indicators import compute_indicators, update_indicators
 from app.backtest.data import build_market_data
 from app.backtest.engine import PortfolioConfig, simulate
-from app.backtest.service import run_single
+from app.backtest.service import NoMarketData, run_single, run_walk_forward
 from app.backtest.vector import technical_score_frame
 from app.backtest.walkforward import fold_windows, stitch
 from app.core.db import get_db
@@ -148,3 +148,16 @@ def test_active_params_drive_live_signals_and_api(db, settings, monkeypatch):
     applied = client.post(f"/api/backtests/{run.id}/apply", headers=headers).json()
     assert applied["active"]["buy_threshold"] == 50 and applied["source"].startswith(f"backtest #{run.id}")
     assert client.post("/api/strategy/params/reset", headers=headers).json()["source"] == "defaults"
+
+
+def test_backtest_without_market_data_is_a_clear_error(db, settings):
+    with pytest.raises(NoMarketData):
+        run_single(db)
+    with pytest.raises(NoMarketData):
+        run_walk_forward(db)
+
+    app = create_app()
+    app.dependency_overrides[get_db] = lambda: db
+    response = TestClient(app).post("/api/backtests/run", headers={"X-API-Key": "test-key"})
+    assert response.status_code == 409
+    assert "No market data" in response.json()["detail"]

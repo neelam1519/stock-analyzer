@@ -8,7 +8,7 @@ from app.api.ingest import job_dict, start_or_409
 from app.backtest import service
 from app.core.db import get_db, get_sessionmaker
 from app.core.jobs import track_job
-from app.models import BacktestRun, BacktestTrade, Instrument, JobRun
+from app.models import BacktestRun, BacktestTrade, DailyCandle, Instrument, JobRun
 from app.signals.params import load_active_params, reset_active_params, save_active_params, to_dict
 from app.signals.scoring import DEFAULT_PARAMS
 
@@ -30,6 +30,8 @@ def run_backtest(
     mode: str = Query(default="single", pattern="^(single|walk_forward)$"),
     db: Session = Depends(get_db),
 ) -> dict:
+    if db.scalar(select(DailyCandle.instrument_id).limit(1)) is None:
+        raise HTTPException(status_code=409, detail="No market data yet: download candles first")
     run = start_or_409(db, f"backtest_{mode}", needs_kite=False)
     background.add_task(_run_job, run.id, mode)
     return job_dict(run)

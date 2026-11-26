@@ -4,7 +4,7 @@ from datetime import date
 from sqlalchemy import delete, insert, select
 from sqlalchemy.orm import Session
 
-from app.backtest.data import load_market_data
+from app.backtest.data import MarketData, load_market_data
 from app.backtest.engine import PortfolioConfig, SimulationResult, simulate
 from app.backtest.walkforward import params_from_dict, walk_forward
 from app.models import BacktestRun, BacktestTrade, Instrument
@@ -13,6 +13,17 @@ from app.signals.scoring import StrategyParams
 
 DEFAULT_START = "2022-09-01"
 EQUITY_POINTS = 400
+
+
+class NoMarketData(RuntimeError):
+    pass
+
+
+def _load(db: Session) -> MarketData:
+    data = load_market_data(db)
+    if len(data.dates) == 0 or not data.symbols:
+        raise NoMarketData("No market data yet: download candles first")
+    return data
 
 
 def downsample(result: SimulationResult) -> list[dict]:
@@ -65,13 +76,13 @@ def _store(db: Session, kind: str, params: StrategyParams, result: SimulationRes
 
 def run_single(db: Session, params: StrategyParams | None = None, start: str = DEFAULT_START) -> BacktestRun:
     params = params or load_active_params(db)[0]
-    data = load_market_data(db)
+    data = _load(db)
     result = simulate(data.window(start, data.dates[-1]), params, PortfolioConfig())
     return _store(db, "single", params, result, {"config": PortfolioConfig().__dict__})
 
 
 def run_walk_forward(db: Session) -> BacktestRun:
-    data = load_market_data(db)
+    data = _load(db)
     wf = walk_forward(data, load_active_params(db)[0])
     folds = [f.__dict__ for f in wf.folds]
     return _store(
